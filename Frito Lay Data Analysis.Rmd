@@ -1,0 +1,478 @@
+---
+title: "Frito-Lay Data Analysis"
+author: "Jasmine O'Neal"
+date: "12/1/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      fig.width = 10, 
+                      fig.asp = 0.618, 
+                      out.width = "100%", 
+                      fig.align = "center", 
+                      message = FALSE, 
+                      warning = FALSE)
+```
+
+
+# Introduction:
+
+### The CEO and CFO of Frito-Lay have tasked consultant Jasmine O'Neal from DDSAnalytics to get a better understanding of DDSAnalytics application of data science driven talent management capabilities. They've asked that analysis be performed using existing employee data before signing on to leverage those capabilities for future use.
+
+### Provided relevant employee data to aid analysis.
+
+### Frito-Lay is interested in understanding factors that contribute to turnover and any other interesting insights that should be highlighted in understanding the employee makeup of Frito-Lay. 
+
+ 1. Determine the top three factors that contribute to turnover
+ 1. Classify likelihood of turnover based on key factors
+ 1. Find other relevant insights from analysis 
+ 
+### Additional questions can be directed towards jasmineo@smu.edu
+
+# Tools:
+
+### This analysis uses R to ingest the CaseStudy2-data.csv dataset to answer the high-level questions outlined above. Also leveraged were ggplot2 visualization capabilities for charting and exploring the data.
+
+### Statistical methods were also used, such as KNN classification, Naive Bayes, and Linear Regression to identify likelihood of turnover based on different factors.
+
+``` {r libraries, include = FALSE}
+# Load libraries necessary to analyze dataset
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(class)
+library(caret)
+library(e1071)
+library(tidyverse)
+library(GGally)
+library(ggthemes)
+library(cowplot)
+library(Metrics)
+```
+
+# Purpose of the following Code:
+
+### Given the CaseStudy2-data.csv dataset from the CEO and CFO of Frito-Lay, and tasked to understand the top three factors that lead to turnover.
+
+### The following code will display those top three factors, classifcation of turnover, and other insights derived from analysis.
+
+### Before understanding the top factors that lead to turnover, need to see what the turnover breakdown is at Frito-Lay currently. 
+
+# Breakdown of Employee Attrition at Frito-Lay:
+
+### The dataset consists of 870 observations in which 84% of employees stayed verses 16% that left. This indicates that Frito-Lay doesn't experience much attrition, however need to explore factors that do lead to attrition.
+
+*Please note, the attrition imbalance from the bar charts below. The analysis to identify the top three factors of attrition will be performed using the dataset as-is. However, when classifying attrition using certain modeling techniques the dataset will be manipulated in order to balance the data for accurate predictions.
+
+``` {r 1}
+# Read CaseStudy2-data csv
+HR = read.csv('CaseStudy2-data.csv', header = TRUE)
+
+# Employee Attrition Breakdown by Count 
+options(repr.plot.width=8, repr.plot.height=4)
+
+attritions_number <- HR %>% group_by(Attrition) %>% summarise(Count=n()) %>%
+  ggplot(aes(x=Attrition, y=Count)) + geom_bar(stat="identity", fill="yellow", color="grey40") + theme_bw() + coord_flip() + 
+  geom_text(aes(x=Attrition, y=0.01, label= Count),
+            hjust=-0.8, vjust=-1, size=3, 
+            color="black", fontface="bold",
+            angle=360) + labs(title="Employee Attrition (Count)", x="Employee Attrition",y="Count") + theme(plot.title=element_text(hjust=0.5))
+
+# Employee Attrition Breakdown by Percentage
+attrition_percentage <- HR %>% group_by(Attrition) %>% summarise(Count=n()) %>% 
+  mutate(pct=round(prop.table(Count),2) * 100) %>% 
+  ggplot(aes(x=Attrition, y=pct)) + geom_bar(stat="identity", fill = "red", color="grey40") + 
+  geom_text(aes(x=Attrition, y=0.01, label= sprintf("%.2f%%", pct)),
+            hjust=0.5, vjust=-3, size=4, 
+            color="black", fontface="bold") + theme_bw() + labs(x="Employee Attrition", y="Percentage") + 
+  labs(title="Employee Attrition (%)") + theme(plot.title=element_text(hjust=0.5))
+
+# Bar chart by Count and Percentage
+plot_grid(attritions_number, attrition_percentage, align="h", ncol=2)
+```
+
+# Turnover Factor 1: Business Travel Impacting Work/Life Balance
+
+### Employees that travel frequently had a higher attrition rate at 22% compared to those that didn’t travel at 11%.
+### Employees that travel rarely had the second highest attrition rate at 15%.
+
+``` {r 2}
+# Attrition and Business Travel
+ggplot(HR, aes(x = Attrition, group = BusinessTravel)) +
+  geom_bar(aes(y = ..prop.., fill = factor(..x..)), stat = "count") +
+  geom_text(aes(label = scales::percent(..prop..),
+                y = ..prop..), stat = "count", vjust = -.5) +
+  labs( y = "Percent", fill = "Attrition") +
+  facet_grid(~BusinessTravel) +
+  scale_y_continuous(labels = scales::percent) +
+  ggtitle("Attrition vs. Business Travel") +
+  scale_fill_brewer(palette="Set1") +
+  theme(legend.position = 'none')
+```
+
+# Turnover Factor 1: Overtime Impacting Work/Life Balance
+
+### Employees that worked overtime had a higher rate of attrition at 32% compared to those that didn’t work overtime at 10%.
+
+``` {r 3}
+# Attrition and Overtime
+ggplot(HR, aes(x = Attrition, group = OverTime)) +
+  geom_bar(aes(y = ..prop.., fill = factor(..x..)), stat = "count") +
+  geom_text(aes(label = scales::percent(..prop..),
+                y = ..prop..), stat = "count", vjust = -.5) +
+  labs( y = "Percent", fill = "Attrition") +
+  facet_grid(~OverTime) +
+  scale_y_continuous(labels = scales::percent) +
+  ggtitle("Attrition vs. Overtime") +
+  scale_fill_brewer(palette="Set1") +
+  theme(legend.position = 'none')
+```
+
+# Turnover Factor 2: Mean Monthly Income varies across different Job Levels Impacting Compensation
+
+### Job Level 1 has the lowest mean monthly income around $2500 compared to Job Level 5 around $18000. This seems to indicate that compensation increases based on the job level. 
+### These discrepancies in compensation could explain if attrition is higher in lower job levels compared to higher job levels as employees may leave to pursue higher compensation.
+
+``` {r 4}
+# Job Level and Mean Monthly Income
+data_histogram <- HR %>%
+  mutate(JobLevel = factor(JobLevel)) %>%
+  group_by(JobLevel) %>%
+  summarize(Mean_MonthlyIncome = round(mean(MonthlyIncome), 2))
+
+ggplot(data_histogram, aes(x = JobLevel, y = Mean_MonthlyIncome, fill = JobLevel)) +
+  geom_bar(stat = "identity", color = "black", aes(fill = Mean_MonthlyIncome)) +
+  scale_fill_gradient2(low='white', mid='snow', high='red') +
+  ggtitle("Mean Monthly Income by Job Level") +
+  xlab("Job Level") +
+  ylab("Monthly Income") +
+  theme(legend.position = 'none') 
+
+# Attrition in different Job Levels
+HR %>%
+  ggplot(aes(x = Attrition, group = JobLevel)) +
+  geom_bar(aes(y = ..prop.., fill = factor(..x..)),stat = "count") +
+  geom_text(aes( label = scales::percent(..prop..),
+                 y= ..prop.. ), stat = "count", vjust = -.5) +
+  labs(y = "Percent", fill ="Attrition") +
+  facet_wrap(~JobLevel) +
+  ggtitle("Attrition by Job Level") +
+  scale_fill_brewer(palette="Set1") +
+  theme(legend.position = 'none')
+```
+
+# Turnover Factor 3: Certain Departments Are More Susceptible
+
+### There are only three departments involved in this analysis which are Sales, HR, and Research & Development. Discovered that the Sales department has the highest attrition rate at 21% followed by Human Resources at 17%. 
+### These departments may experience higher attrition due to the nature of their departments where employees have to meet certain performance expectations which is critical to being successful in their roles. Therefore this and other job related factors could influence attrition. 
+
+``` {r 5}
+# Attrition by Department
+ggplot(HR, aes(x = Attrition, group = Department)) +
+  geom_bar(aes(y = ..prop.., fill = factor(..x..)), stat = "count") +
+  geom_text(aes(label = scales::percent(..prop..),
+                y = ..prop..), stat = "count", vjust = -.5) +
+  labs( y = "Percent", fill = "Attrition") +
+  facet_grid(~Department) +
+  scale_y_continuous(labels = scales::percent) +
+  ggtitle("Attrition vs. Department") +
+  scale_fill_brewer(palette="Set1") +
+  theme(legend.position = 'none')
+```
+
+# Display Mean Monthly Income by Job Role
+
+### Mean monthly income varies across job roles. Manager and Research Director have the highest monthly income at just over $15,000. Manufacturing Director and Healthcare Representative make around $7500. Laboratory Technician and Sales Representative make under $5000. 
+### Employees in management roles tend to have higher income. Employees in individual contributor roles tend to have lower income.
+
+``` {r 6}
+# Job Specific Trends
+# Mean Monthly Income by Job Role
+HR$JobRole <- fct_reorder(HR$JobRole, HR$MonthlyIncome, 'mean', .desc = TRUE)
+HR %>%
+  group_by(JobRole) %>%
+  summarize(Mean_MonthlyIncome = mean(MonthlyIncome)) %>%
+  ggplot(aes(x = JobRole, y = Mean_MonthlyIncome)) +
+  geom_bar(stat = "identity", color = "black", aes(fill = Mean_MonthlyIncome)) +
+  scale_fill_gradient2(low='white', mid='snow', high='red') +
+  ggtitle("Mean Monthly Income by Job Role") +
+  xlab("Job Role") +
+  ylab("Monthly Income") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(legend.position = 'none')
+```
+
+# Attrition Comparison by Gender based on Job Satisfaction
+
+### Both Female and Male employees that stay have the same median satisfaction score at 3. However, for Female employees that leave the satisfaction score is lower at 2 compared to Male at 3.
+
+### Performed a quick check on Mean Monthly Income by Gender found that Female employees make around $67,000 compared to Male employees at $62,000. This could suggest other factors outside of compensation are contributing to lower satisfaction scores for Female employees that leave.
+
+``` {r 7}
+# Job Specific Trends
+# Boxplot of Gender Satisfaction
+ggplot(data = HR) +
+  geom_boxplot(aes(x = Attrition, y = JobSatisfaction, fill = Attrition)) +
+  ggtitle("Gender and Job Satisfaction") +
+  facet_wrap(~Gender) +
+  ylab("Job Satisifaction")
+
+# Female Mean Monthly Income at 6696.26
+HR %>%
+  filter(Gender == "Female") %>%
+  summarize(Mean_MonthlyIncome = mean(MonthlyIncome))
+
+# Male Mean Monthly Income 6180.337
+HR %>%
+  filter(Gender == "Male") %>%
+  summarize(Mean_MonthlyIncome = mean(MonthlyIncome))
+```
+
+# Classifying Likelihood of Attrition
+
+### The KNN classification and Naive Bayes models below will determine the probability of whether an employee is likely to stay or leave the company given their Monthly Income and Job Level. Will also explore other combinations like Monthly Income and Age. 
+
+### By comparing a given unknown employee's Monthly Income and Job Level and Monthly Income and Age able to determine with 64% accuracy what the true Attrition is through the Naive Bayes model. The results are also consistent with the scatterplot that younger employees are more likely to leave in order to pursue higher income in some cases.
+
+Finally there is a scatterplot for a visual check on the relationship. 
+
+The following code also compares the KNN model to Naive Bayes to determine which model performed better.
+
+Please note, upsampling was used to balance the dataset to ensure the training and test sets could draw from an equal distribution of data, especially with the Attrition variable.
+
+``` {r 8}
+# KNN Classification before upsampling
+# Use Monthly Income and Job Level to predict Attrition
+
+# Change Attrition to factor
+HR$Attrition = as.factor(HR$Attrition)
+
+# KNN of unknown Attrition with Monthly Income of 4403 and Job Level of 2
+df = data.frame(MonthlyIncome = 4403 , JobLevel = 2 )
+knn(HR[,c(16,20)], df, HR$Attrition, k = 5, prob = TRUE)
+knn(HR[,c(16,20)], df, HR$Attrition, k = 15, prob = TRUE)
+knn(HR[,c(16,20)], df, HR$Attrition, k = 30, prob = TRUE)
+
+# KNN of unknown Attrition with Monthly Income of 19626 and Job Level of 5
+df1 = data.frame(MonthlyIncome = 9362 , JobLevel = 5 )
+knn(HR[,c(16,20)], df1, HR$Attrition, k = 5, prob = TRUE)
+knn(HR[,c(16,20)], df1, HR$Attrition, k = 15, prob = TRUE)
+knn(HR[,c(16,20)], df1, HR$Attrition, k = 30, prob = TRUE)
+
+# Create training and test sets
+trainInd = sample(seq(1,870,1), .7*870)
+train = HR[trainInd,]
+test = HR[-trainInd,]
+
+# Note, before upsampling specificity is well below 60% target
+# Testing with k = 5
+classifications = knn(train[,c(16,20)],test[,c(16,20)],train$Attrition, prob = TRUE, k = 5)
+confusionMatrix(table(classifications,test$Attrition))
+
+# Testing with k = 15
+classifications = knn(train[,c(16,20)],test[,c(16,20)],train$Attrition, prob = TRUE, k = 15)
+confusionMatrix(table(classifications,test$Attrition))
+
+# Testing with k = 30
+classifications = knn(train[,c(16,20)],test[,c(16,20)],train$Attrition, prob = TRUE, k = 30)
+confusionMatrix(table(classifications,test$Attrition))
+```
+
+``` {r 9}
+# Naive Bayes before upsampling
+# Use Monthly Income and Job Level to predict Attrition
+
+# Naive Bayes with Monthly Income and Job Level
+model = naiveBayes(HR[,c(16,20)],HR$Attrition)
+predict(model,data.frame(MonthlyIncome = 4403, JobLevel = 2))
+predict(model,data.frame(MonthlyIncome = 4403, JobLevel = 2), type = "raw")
+
+# Split data into training and test sets
+set.seed(20)
+trainIndices = sample(seq(1,870,1), .7*870)
+trainHR = HR[trainIndices,]
+testHR = HR[-trainIndices,]
+
+# NB Model based on training set using Monthly Income and Job Level
+nbmodel = naiveBayes(trainHR[,c(16,20)],trainHR$Attrition)
+table(predict(nbmodel,testHR[,c(16,20)]),testHR$Attrition)
+CM = confusionMatrix(table(predict(nbmodel,testHR[,c(16,20)]),testHR$Attrition))
+CM
+```
+
+``` {r 10}
+# KNN Classification after upsampling
+# Upsampling to make sure equal number of Yes/No
+HR1.up = upSample(HR[,-3], HR$Attrition, yname = "Attrition")
+str(HR1.up)
+table(HR1.up$Attrition)
+
+# Use Monthly Income and Job Level to predict Attrition
+# Change Attrition to factor
+HR1.up$Attrition = as.factor(HR1.up$Attrition)
+
+# KNN of unknown Attrition with Monthly Income of 4403 and Job Level of 2
+df2 = data.frame(MonthlyIncome = 4403 , JobLevel = 2 )
+knn(HR1.up[,c(15,19)], df2, HR1.up$Attrition, k = 5, prob = TRUE)
+knn(HR1.up[,c(15,19)], df2, HR1.up$Attrition, k = 15, prob = TRUE)
+knn(HR1.up[,c(15,19)], df2, HR1.up$Attrition, k = 30, prob = TRUE)
+
+# KNN of unknown Attrition with Monthly Income of 19626 and Age of 40
+df3 = data.frame(MonthlyIncome = 19626 , Age = 40 )
+knn(HR1.up[,c(2,19)], df3, HR1.up$Attrition, k = 5, prob = TRUE)
+knn(HR1.up[,c(2,19)], df3, HR1.up$Attrition, k = 15, prob = TRUE)
+knn(HR1.up[,c(2,19)], df3, HR1.up$Attrition, k = 30, prob = TRUE)
+
+# Create training and test sets using upsampled data
+trainIndHR1 = sample(seq(1,1460,1), .7*1460)
+trainHR1 = HR1.up[trainIndHR1,]
+testHR1 = HR1.up[-trainIndHR1,]
+
+
+# Monthly Income and Job Level
+# Testing with k = 5
+classifications = knn(trainHR1[,c(15,19)],testHR1[,c(15,19)],trainHR1$Attrition, prob = TRUE, k = 5)
+confusionMatrix(table(classifications,testHR1$Attrition))
+
+# Testing with k = 15
+classifications = knn(trainHR1[,c(15,19)],testHR1[,c(15,19)],trainHR1$Attrition, prob = TRUE, k = 15)
+confusionMatrix(table(classifications,testHR1$Attrition))
+
+# Testing with k = 30
+classifications = knn(trainHR1[,c(15,19)],testHR1[,c(15,19)],trainHR1$Attrition, prob = TRUE, k = 30) 
+confusionMatrix(table(classifications,testHR1$Attrition))
+
+# Testing with k = 31
+classifications = knn(trainHR1[,c(15,19)],testHR1[,c(15,19)],trainHR1$Attrition, prob = TRUE, k = 31) 
+confusionMatrix(table(classifications,testHR1$Attrition))
+
+# Monthly Income and Age
+# Testing with k = 5
+classifications = knn(trainHR1[,c(2,19)],testHR1[,c(2,19)],trainHR1$Attrition, prob = TRUE, k = 5)
+confusionMatrix(table(classifications,testHR1$Attrition))
+
+# Testing with k = 15
+classifications = knn(trainHR1[,c(2,19)],testHR1[,c(2,19)],trainHR1$Attrition, prob = TRUE, k = 15)
+confusionMatrix(table(classifications,testHR1$Attrition))
+
+# Testing with k = 30
+classifications = knn(trainHR1[,c(2,19)],testHR1[,c(2,19)],trainHR1$Attrition, prob = TRUE, k = 30) 
+confusionMatrix(table(classifications,testHR1$Attrition))
+
+# Testing with k = 31
+classifications = knn(trainHR1[,c(2,19)],testHR1[,c(2,19)],trainHR1$Attrition, prob = TRUE, k = 31)
+confusionMatrix(table(classifications,testHR1$Attrition))
+```
+
+``` {r 11}
+# Naive Bayes after upsampling
+
+# NB Model based on training set using Monthly Income and Job Level
+nbmodel1 = naiveBayes(trainHR1[,c(15,19)],trainHR1$Attrition)
+table(predict(nbmodel1,testHR1[,c(15,19)]),testHR1$Attrition)
+CM1 = confusionMatrix(table(predict(nbmodel1,testHR1[,c(15,19)]),testHR1$Attrition))
+CM1
+```
+
+### The Naive Bayes model below provides the best outcome in indentifying Attrition
+* Achieved Sensitivity and Specificity at 60% or above.
+
+``` {r 12}
+# NB Model based on training set using Monthly Income and Age
+nbmodel1 = naiveBayes(trainHR1[,c(2,20)],trainHR1$Attrition)
+table(predict(nbmodel1,testHR1[,c(2,20)]),testHR1$Attrition)
+CM1 = confusionMatrix(table(predict(nbmodel1,testHR1[,c(2,20)]),testHR1$Attrition))
+CM1
+```
+
+
+``` {r 13}
+# Scatterplot displaying likelihood of attrition based on Age and Monthly Income
+ggplot(data = HR1.up) + 
+  geom_point(mapping = aes(x = Age, y = MonthlyIncome, color = Attrition)) + 
+  geom_smooth(aes(x = Age, y = MonthlyIncome, color = Attrition)) +
+  facet_wrap(~ Attrition) +
+  ggtitle("Attrition Based on Age and Monthly Income") 
+```
+
+# RMSE of Final Model
+### Achieved an RMSE of 2427.964 for test set and 5748.237 for training set. This indicates for the test set at least is close to the line of best fit and not much distance from the salary expectation. Need to perform further analysis on how to improve this value for the training set.
+
+``` {r 14}
+# Dataframe with Monthly Income and Total Working Years
+HR2 = HR1.up %>%
+  select(TotalWorkingYears, MonthlyIncome)
+
+# Load the data
+data("HR2", package = "MASS")
+# Inspect the data
+
+sample_n(HR2, 3)
+# Split the data into training and test set
+set.seed(123)
+training.samples <- HR2$MonthlyIncome %>%
+  createDataPartition(p = 0.7, list = FALSE)
+train.data  <- HR2[training.samples, ]
+test.data <- HR2[-training.samples, ]
+
+# Fit the model on the training set
+set.seed(123)
+model <- train(
+  MonthlyIncome~., data = train.data, method = "knn",
+  trControl = trainControl("cv", number = 10),
+  preProcess = c("center","scale"),
+  tuneLength = 10
+)
+# Plot model error RMSE vs different values of k
+plot(model)
+# Best tuning parameter k that minimize the RMSE
+model$bestTune
+# Make predictions on the test data
+predictions <- model %>% predict(test.data)
+head(predictions)
+# Compute the prediction error RMSE
+RMSE(predictions, test.data$MonthlyIncome)
+RMSE(predictions, train.data$MonthlyIncome)
+```
+
+# Linear Regression
+### The estimated mean monthly income for an employee's age of 30 years old is $4710 per month. We are 95% confident that the mean monthly income is between $4266 and $5154 per month.
+
+``` {r 15}
+# Linear Regression
+HR %>%
+  filter(Age < 30) %>%
+  ggplot(aes(x = Age, y = MonthlyIncome)) +
+  geom_point() +
+  ggtitle("Monthly Income vs. Age") +
+  geom_smooth(method = "lm") +
+  xlim(20,40)
+
+HR3 = HR %>%
+  filter(Age < 30)
+fit = lm(MonthlyIncome ~ Age, HR3)
+summary(fit)
+confint(fit)
+
+Employee_Age = data.frame(Age = 30)
+predict(fit, newdata = Employee_Age, interval = "confidence")
+```
+
+# Conclusion:
+
+### In summary, derived the following insights from the analysis:
+   1. Business Travel and Overtime impact Work/life balance
+   1. Job Level 1 has the lowest mean monthly income around $2500 compared to Job Level 5 around $18000. This seems to indicate that compensation increases based on the job level 
+   1. Mean Monthly Income by Gender found that Female employees make around $67,000 compared to Male employees at $62,000. This could suggest other factors outside of compensation are contributing to lower satisfaction scores for Female employees that leave
+   1. Sales, HR, and Research & Development may experience higher attrition due to the nature of their departments where meeting certain performance expectations is critical to be being successful in their roles. Therefore this and other job related factors could influence attrition
+
+### Based on these insights have the following recommendations that Frito-Lay can explore in further detail:
+   1. Companies should offer flexible work options for employees that left companies due to business travel or overtime
+   1. Since younger employees are more likely to leave companies early in their career for other opportunities or better compensation, companies should offer higher salaries in entry level roles
+   1. Companies should assess job satisfaction of department/roles in more detail to understand if conditions or performance expectations can be improved to lesson attrition
+    
+### Reference Youtube Presentation for detailed overview:
+* https://youtu.be/ms2W7HdwB4o
+
+
