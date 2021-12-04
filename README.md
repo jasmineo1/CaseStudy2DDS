@@ -6,5 +6,6 @@ This repository containts the data, code, and presentations used in a consultant
 The markdown code assumes that this repositorie's structure is used as it reads in files from the Data folder.
 
 HTML preview of the Markdown that includes code, findings, and visualizations can be found at:
+https://htmlpreview.github.io/?https://github.com/jasmineo1/CaseStudy2DDS/blob/main/Frito-Lay-Data-Analysis.html
 
 Alternatively, the raw HTML can be downloaded from this repository.
